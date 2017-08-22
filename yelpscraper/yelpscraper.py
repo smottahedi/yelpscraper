@@ -54,22 +54,33 @@ def get_resturants(zipcode, page_num, tor=False):
 
 def get_review(address, tor=False):
     """get yelp review from web page."""
+
     if tor:
         soup = BeautifulSoup(get(address).text)
     else:
         soup = BeautifulSoup(urlopen(address).read(), 'html.parser')
-    try:
-        review = soup('script', {'type': "application/ld+json"})
-        for tag in soup.find_all('meta'):
-            try:
-                if tag.attrs['name'] == 'yelp-biz-id':
-                    biz_id = tag.attrs['content']
-                    return biz_id, review
-            except:
-                pass
-    except:
-        print("failed to get reviews")
-        return '', []
+
+    review_page =  len(soup.findAll('div', {'class': 'arrange_unit page-option'}))
+    pages = range(20, review_page * 20 + 1, 20)
+    review = None
+    for page in pages:
+        soup = BeautifulSoup(urlopen(address + '?start={}'.format(page)).read(),
+                             'html.parser')
+        try:
+            if not review:
+                review = soup('script', {'type': "application/ld+json"})
+            else:
+                review += soup('script', {'type': "application/ld+json"})
+        except:
+            print("failed to get reviews")
+            return '', []
+    for tag in soup.find_all('meta'):
+        try:
+            if tag.attrs['name'] == 'yelp-biz-id':
+                biz_id = tag.attrs['content']
+                return biz_id, review
+        except:
+            pass
 
 
 def get_attribute(address, tor=False):
@@ -157,7 +168,7 @@ def crawl(zipcodes=None, tor=False, sleep_time=10, start_page=0):
     request_count = 0
     flag = True
     header_flag = True
-    zipcodes = [zipcodes] if zipcodes else get_zipcode()
+    zipcodes = zipcodes if zipcodes else get_zipcode()
     for zipcode in zipcodes:
         page = start_page
         request_count = 0
@@ -177,7 +188,6 @@ def crawl(zipcodes=None, tor=False, sleep_time=10, start_page=0):
             request_count += 1
             print('page {}, at zipcode {}'.format(page, zipcode))
             resturants, flag = get_resturants(zipcode, page, tor)
-           # import pdb; pdb.set_trace()
             for resturant in resturants:
                 if resturant in biz_names:
                     print('repeated biz_name: ', resturant)
@@ -199,7 +209,7 @@ def crawl(zipcodes=None, tor=False, sleep_time=10, start_page=0):
                 request_count += 1
                 attr_dict = get_attribute(resturants[resturant], tor)
                 if attr_dict['zipcode'] and \
-                        attr_dict['zipcode'] != zipcode:
+                        int(attr_dict['zipcode']) != int(zipcode):
                     out_of_zipcode_resturant += 1
                     continue
                 print('scraping returant:' + resturant + ', at zipcode:' +
@@ -212,25 +222,28 @@ def crawl(zipcodes=None, tor=False, sleep_time=10, start_page=0):
                         file.write(','.join(list(attr_dict.keys())) + '\n')
                         header_flag = False
                     file.write(','.join(list(attr_dict.values())) + '\n')
-                reviews = review.pop()
-                reviews = reviews.get_text().split("\"description\"")
-                for review in reviews[1:]:
-                    try:
-                        words = review.split("\"author\"")[0].\
-                            replace("\\n", '').lower()
-                        words = re.sub("[^a-zA-Z]", " ", words).split(" ")
-                        words = [word for word in words if len(word) > 1]
-                        if biz_id == '':
-                            words.insert(0, resturant)
-                        else:
-                            words.insert(0, biz_id)
-                        words.append('\n')
-                        words = ','.join(words)
-                    except:
-                        print('skipped ' + resturant)
-                    with open('./data/' + str(zipcode) + '_reviews.csv',
-                              'a') as file:
-                        file.write(words)
+
+                # reviews = review.pop()
+                # reviews = reviews.get_text().split("\"description\"")
+                for reviews in review:
+                    for section in  reviews.get_text().split("\"description\""):
+                        try:
+                            # reviews = reviews.get_text().split("\"description\"")
+                            words = section.split("\"author\"")[0].\
+                                replace("\\n", '').lower()
+                            words = re.sub("[^a-zA-Z]", " ", words).split(" ")
+                            words = [word for word in words if len(word) > 1]
+                            if biz_id == '':
+                                words.insert(0, resturant)
+                            else:
+                                words.insert(0, biz_id)
+                            words.append('\n')
+                            words = ','.join(words)
+                        except:
+                            print('skipped ' + resturant)
+                        with open('./data/' + str(zipcode) + '_reviews.csv',
+                                'a') as file:
+                            file.write(words)
 
             page += 10
     return True
