@@ -11,7 +11,7 @@ Fabric==1.13.1
 idna==2.2
 ipaddr==2.1.11
 ipaddress==1.0.18
-ipython==5.2.2
+ipython==7.16.3
 ipython-genutils==0.1.0
 packaging==16.8
 paramiko==2.1.2
